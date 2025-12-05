@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+pydantic
+sqlalchemy
+databases[postgresql]
+python-dotenv
+fastapi-mail
+python-multipart
+jinja2
+aiofiles
