@@ -8,3 +8,6 @@ fastapi-mail
 python-multipart
 jinja2
 aiofiles
+psycopg2
+bleach
+httpx

@@ -1,16 +1,32 @@
 from fastapi import FastAPI, HTTPException, APIRouter
 from typing import List
 from db import database, users
-from models import UserIn, UserOut
+from models import UserIn, UserOut, UserLogin
 from security import generate_salt, hash_password
 import base64
+import bleach
+import os
+import httpx
 
 app = FastAPI()
 
 router = APIRouter(prefix="/users", tags=["users"])
 
+RECAPTCHA_SECRET = os.getenv("RECAPTCHA_SECRET")
+
 @router.post("/register", response_model=UserOut)
 async def register_user(user: UserIn):
+    url = "https://www.google.com/recaptcha/api/siteverify"
+    data = {"secret": RECAPTCHA_SECRET, "response": user.token}
+    async with httpx.AsyncClient() as client:
+        response = await client.post(url, data=data)
+        result = response.json()
+        if not result.get("success"):
+            raise HTTPException(status_code=400, detail="No se pudo verificar reCAPTCHA. Intenta de nuevo.")
+
+    
+    clean_username = bleach.clean(user.username)  
+    user.username = clean_username
 
     existing_user = await database.fetch_one(
         users.select().where(users.c.email == user.email)
@@ -18,18 +34,14 @@ async def register_user(user: UserIn):
     if existing_user:
         raise HTTPException(status_code=400, detail="El email ya está registrado")
 
-    # 1. Crear salt
     salt = generate_salt()
     salt_b64 = base64.b64encode(salt).decode()
-
-    # 2. Crear hash (verifier)
     verifier = hash_password(user.password, salt)
 
-    # 3. Guardar usuario
     query = users.insert().values(
         email=user.email,
         username=user.username,
-        phonenumber=user.phonenumber,
+        usertype=user.usertype,
         salt=salt_b64,
         verifier=verifier
     )
@@ -39,31 +51,26 @@ async def register_user(user: UserIn):
     return UserOut(
         id=user_id,
         email=user.email,
-        username=user.username,
-        phonenumber=user.phonenumber
+        username=user.username
     )
 
 @router.post("/login")
-async def login_user(user: UserIn):
+async def login_user(user: UserLogin):
     """
     Login seguro usando salt + hash almacenado.
     """
 
-    # 1. Buscar el usuario
     db_user = await database.fetch_one(
         users.select().where(users.c.email == user.email)
     )
     if not db_user:
         raise HTTPException(status_code=400, detail="Usuario no encontrado")
 
-    # 2. Recuperar salt y verifier
     salt = base64.b64decode(db_user["salt"])
     stored_verifier = db_user["verifier"]
 
-    # 3. Hashear la contraseña ingresada por el usuario
     calculated_hash = hash_password(user.password, salt)
 
-    # 4. Comparar
     if calculated_hash != stored_verifier:
         raise HTTPException(status_code=401, detail="Credenciales inválidas")
 

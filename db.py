@@ -1,4 +1,3 @@
-# db.py
 import os
 from databases import Database
 from sqlalchemy import Table, Column, Integer, String, MetaData, create_engine
@@ -14,7 +13,7 @@ users = Table(
     Column("id", Integer, primary_key=True),
     Column("email", String(150), unique=True, nullable=False),
     Column("username", String(100), nullable=False),
-    Column("phonenumber", String(20)),
+    Column("usertype", String(20), nullable=False),
     Column("salt", String(255), nullable=False),       
     Column("verifier", String(255), nullable=False)
 )
